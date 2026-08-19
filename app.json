@@ -5,11 +5,11 @@
     "appName": "灵龟八法",
     "appType": "watchface",
     "version": {
-      "code": 7,
-      "name": "1.5.0"
+      "code": 10,
+      "name": "1.6.2"
     },
     "vender": "zepp",
-    "description": "基于官方 Timer 模板的 GTR 4 灵龟八法表盘",
+    "description": "带玄甲龟背纹的 GTR 4 灵龟八法动态表盘",
     "icon": "images/preview.png"
   },
   "permissions": [
