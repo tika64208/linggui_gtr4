@@ -4,6 +4,12 @@
 
 > 本项目仅用于传统文化与表盘设计展示，不构成医疗建议。
 
+## 表盘预览
+
+<p align="center">
+  <img src="assets/466x466-amazfit-gtr-4/images/preview.png" width="466" alt="灵龟八法 Amazfit GTR 4 表盘预览">
+</p>
+
 ## 功能
 
 - 24 小时制数字时间
@@ -37,4 +43,3 @@ zeus preview
 - Zepp App ID：`1123978`
 - 表盘版本：`1.5.0`
 - 目标设备：Amazfit GTR 4
-
