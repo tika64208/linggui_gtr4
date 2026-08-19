@@ -7,6 +7,12 @@ let turtleStep = 0
 let uiRefs = {}
 let pointRefs = []
 let turtleRefs = []
+let easterEggTurtleRefs = []
+let easterEggActive = false
+let easterEggTick = 0
+let easterEggBaseStep = 0
+let easterEggMinuteAngle = 0
+let easterEggOverlapCount = 0
 
 const TURTLE_CONFIGS = [
   { size: 120, radius: 177, delay: 0, poseOffset: 0, path: 'images/final/turtle/pose_' },
@@ -99,49 +105,253 @@ function setText(widget, text, color) {
   widget.setProperty(hmUI.prop.MORE, options)
 }
 
+function signedAngleDifference(angle, target) {
+  return mod(angle - target + 180, 360) - 180
+}
+
+function smoothProgress(value) {
+  const clamped = Math.max(0, Math.min(1, value))
+  return clamped * clamped * (3 - 2 * clamped)
+}
+
+function updateEasterEggTurtles() {
+  const baseAngle = easterEggBaseStep * 360 / 600
+  const needleAngle = easterEggMinuteAngle
+  const waitingOffsets = [0, -7, -13]
+  const landingOffsets = [16, 10, 4]
+  // Do not restore the normal (under-hand) layer until even the smallest
+  // turtle is safely beyond both hands and their normal crossing effects.
+  // With the 60-degree child delay, +92 leaves the smallest turtle at +32.
+  const exitBaseAngle = needleAngle + 92
+  const tick = easterEggTick
+
+  for (let i = 0; i < TURTLE_CONFIGS.length; i += 1) {
+    const config = TURTLE_CONFIGS[i]
+    const delayAngle = config.delay * 360 / 600
+    const startAngle = baseAngle - delayAngle
+    let angle = startAngle
+    let radius = config.radius
+    let movementHeading = angle + 90
+    let playfulTurn = 0
+    let liftScale = 1
+
+    if (tick < 30) {
+      // The mother stops while both children close the gap behind her.
+      const progress = smoothProgress(tick / 30)
+      const waitingAngle = baseAngle + waitingOffsets[i]
+      angle = startAngle + (waitingAngle - startAngle) * progress
+      movementHeading = angle + 90
+    } else if (tick < 110) {
+      // Cross over the minute hand instead of travelling along it. The mother
+      // goes first and each child follows a little later.
+      const stagger = i * 8
+      const progress = smoothProgress((tick - 30 - stagger) / (80 - stagger))
+      const waitingAngle = baseAngle + waitingOffsets[i]
+      const landingAngle = needleAngle + landingOffsets[i]
+      angle = waitingAngle + signedAngleDifference(landingAngle, waitingAngle) * progress
+      const lift = Math.sin(progress * Math.PI)
+      radius = config.radius + lift * (i === 0 ? 13 : (i === 1 ? 9 : 7))
+      movementHeading = angle + 90
+      playfulTurn = Math.sin(progress * Math.PI * 3 + i) * lift * (i === 0 ? 5 : 8)
+      liftScale = 1 + lift * (i === 0 ? 0.08 : 0.06)
+    } else {
+      // Land, fan back into the normal spacing and keep moving clockwise.
+      const progress = smoothProgress((tick - 110) / 69)
+      const finalAngle = exitBaseAngle - delayAngle
+      const landingAngle = needleAngle + landingOffsets[i]
+      angle = landingAngle + signedAngleDifference(finalAngle, landingAngle) * progress
+      const finalRadians = finalAngle * Math.PI / 180
+      const finalRadius = config.radius + 3 * Math.sin(finalRadians * 2)
+      radius = config.radius + (finalRadius - config.radius) * progress
+      movementHeading = angle + 90
+      playfulTurn = Math.sin(progress * Math.PI * 2 + i) * (1 - progress) * 4
+    }
+
+    const radians = angle * Math.PI / 180
+    const centerX = 233 + radius * Math.sin(radians)
+    const centerY = 233 - radius * Math.cos(radians)
+    const renderedSize = Math.round(config.size * liftScale)
+    const halfSize = renderedSize / 2
+    const exitStep = mod(exitBaseAngle * 600 / 360, 600)
+    const animatedPose = mod(Math.floor(easterEggBaseStep + tick * 0.5) + config.poseOffset, 8)
+    // Match the exact normal-orbit pose on the final visible overlay frame.
+    const pose = tick >= 179
+      ? mod(Math.floor(exitStep) + config.poseOffset, 8)
+      : animatedPose
+    easterEggTurtleRefs[i].setProperty(hmUI.prop.MORE, {
+      x: px(Math.round(centerX - halfSize)),
+      y: px(Math.round(centerY - halfSize)),
+      w: px(renderedSize),
+      h: px(renderedSize),
+      center_x: px(halfSize),
+      center_y: px(halfSize),
+      angle: Math.round(movementHeading + playfulTurn),
+      src: config.path + pose + '.png',
+    })
+  }
+
+  easterEggTick += 1
+  if (easterEggTick >= 180) {
+    turtleStep = mod(exitBaseAngle * 600 / 360, 600)
+    easterEggActive = false
+    // Draw the normal layer at the exact hand-off coordinates before hiding
+    // the overlay. This removes the previous one-timer-tick blank flash.
+    updateTurtles()
+    for (let i = 0; i < easterEggTurtleRefs.length; i += 1) {
+      easterEggTurtleRefs[i].setProperty(hmUI.prop.MORE, { x: px(-500), y: px(-500) })
+    }
+  }
+}
+
+function turtleCrossingEffect(turtleIndex, orbitAngle) {
+  if (!timeSensor) return { angleOffset: 0, radial: 0, turn: 0, scaleX: 1, scaleY: 1 }
+
+  const hourAngle = (timeSensor.hour % 12) * 30 + timeSensor.minute * 0.5
+  const hourDelta = signedAngleDifference(orbitAngle, hourAngle)
+  const minuteAngle = timeSensor.minute * 6
+  const minuteDelta = signedAngleDifference(orbitAngle, minuteAngle)
+  const strength = turtleIndex === 0 ? 1 : (turtleIndex === 1 ? 0.72 : 0.60)
+  const nervous = turtleIndex === 2 ? 1 : (turtleIndex === 0 ? 0.25 : 0)
+
+  // The hour-hand story takes priority whenever both hands are close.
+  if (hourDelta >= -24 && hourDelta <= 20) {
+    if (hourDelta < -18) {
+      const probe = (hourDelta + 24) / 6
+      const hesitation = Math.sin(probe * Math.PI)
+      return {
+        angleOffset: -hesitation * (1.5 + nervous * 4),
+        radial: 0,
+        turn: Math.sin(probe * Math.PI * 4) * (4 + nervous * 8),
+        scaleX: 1 - hesitation * 0.02 * nervous,
+        scaleY: 1 - hesitation * 0.02 * nervous,
+      }
+    }
+
+    if (hourDelta < -3) {
+      const climb = (hourDelta + 18) / 15
+      const stair = Math.min(1, Math.floor(climb * 4) / 3)
+      const visualDelta = -18 + climb * 6
+      return {
+        angleOffset: (visualDelta - hourDelta) * strength - Math.sin(climb * Math.PI) * 3 * nervous,
+        radial: stair * 14 * strength,
+        turn: -Math.sin(climb * Math.PI * 3) * 8 * strength +
+          Math.sin(climb * Math.PI * 6) * 6 * nervous,
+        scaleX: 1 + stair * 0.07 * strength,
+        scaleY: 1 + stair * 0.07 * strength,
+      }
+    }
+
+    if (hourDelta < 9) {
+      const leap = (hourDelta + 3) / 12
+      const eased = leap * leap * (3 - 2 * leap)
+      const visualDelta = -12 + eased * 20
+      const height = Math.sin(leap * Math.PI)
+      return {
+        angleOffset: (visualDelta - hourDelta) * strength - height * 4 * nervous,
+        radial: ((1 - leap) * 14 + height * 8) * strength,
+        turn: -height * 11 * strength + Math.sin(leap * Math.PI * 2) * 8 * nervous,
+        scaleX: 1 + ((1 - leap) * 0.07 + height * 0.14) * strength,
+        scaleY: 1 + ((1 - leap) * 0.07 + height * 0.14) * strength,
+      }
+    }
+
+    // Rotate between a clean landing, a stumble and a small overshoot so the
+    // family does not repeat exactly the same performance every minute.
+    const landing = (hourDelta - 9) / 11
+    const eased = landing * landing * (3 - 2 * landing)
+    const visualDelta = 8 + eased * 12
+    const impact = Math.sin(landing * Math.PI)
+    const ending = timeSensor.minute % 3
+    const stumble = ending === 1 ? 1 : (ending === 2 ? 0.65 : 0.38)
+    const overshoot = ending === 2 ? impact * 5 : 0
+    const landingScale = 1 + impact * 0.04 * strength
+    return {
+      angleOffset: (visualDelta - hourDelta) * strength + overshoot,
+      radial: -impact * (5 + stumble * 3) * strength,
+      turn: Math.sin(landing * Math.PI * (3 + nervous * 2)) *
+        (1 - landing) * 30 * stumble * (1 + nervous * 0.45),
+      scaleX: landingScale,
+      scaleY: landingScale,
+    }
+  }
+
+  // Under the minute hand the turtles briefly accelerate without deformation.
+  // The movement starts and ends on the normal orbit, so it never drifts.
+  if (minuteDelta >= -8 && minuteDelta <= 8) {
+    const duck = (minuteDelta + 8) / 16
+    const envelope = Math.sin(duck * Math.PI)
+    return {
+      angleOffset: envelope * (2.5 + turtleIndex * 0.5),
+      radial: -envelope * 3 * strength,
+      turn: Math.sin(duck * Math.PI * 2) * 4 * strength,
+      scaleX: 1,
+      scaleY: 1,
+    }
+  }
+
+  return { angleOffset: 0, radial: 0, turn: 0, scaleX: 1, scaleY: 1 }
+}
+
 function updateTurtles() {
   if (turtleRefs.length === 0) return
   const orbitSteps = 600
+
+  if (timeSensor && !easterEggActive) {
+    const hourAngle = (timeSensor.hour % 12) * 30 + timeSensor.minute * 0.5
+    const minuteAngle = timeSensor.minute * 6
+    const handGap = Math.abs(signedAngleDifference(hourAngle, minuteAngle))
+    if (handGap >= 10) easterEggOverlapCount = 0
+
+    const motherAngle = mod(turtleStep, orbitSteps) * 360 / orbitSteps
+    // Start two minute marks before the minute hand. The mother pauses here
+    // for the children, then the family crosses over the hand together.
+    const gatheringAngle = mod(minuteAngle - 12, 360)
+    const motherAtGate = Math.abs(signedAngleDifference(motherAngle, gatheringAngle)) < 4
+    if (easterEggOverlapCount < 3 && handGap < 10 && motherAtGate) {
+      easterEggActive = true
+      easterEggTick = 0
+      easterEggBaseStep = turtleStep
+      easterEggMinuteAngle = minuteAngle
+      easterEggOverlapCount += 1
+      for (let i = 0; i < turtleRefs.length; i += 1) {
+        turtleRefs[i].setProperty(hmUI.prop.MORE, { x: px(-500), y: px(-500) })
+      }
+    }
+  }
+
+  if (easterEggActive) {
+    updateEasterEggTurtles()
+    return
+  }
+
   for (let i = 0; i < TURTLE_CONFIGS.length; i += 1) {
     const config = TURTLE_CONFIGS[i]
     const orbitStep = mod(turtleStep - config.delay, orbitSteps)
-    const angle = orbitStep * Math.PI * 2 / orbitSteps
-    const radius = config.radius + 3 * Math.sin(angle * 2)
-    const centerX = 233 + radius * Math.sin(angle)
-    const centerY = 233 - radius * Math.cos(angle)
-    const heading = orbitStep * 360 / orbitSteps + 90
-    const pose = mod(turtleStep + config.poseOffset, 8)
-    const halfSize = config.size / 2
+    const orbitAngle = orbitStep * 360 / orbitSteps
+    const crossing = turtleCrossingEffect(i, orbitAngle)
+    const visualOrbitAngle = orbitAngle + crossing.angleOffset
+    const visualAngle = visualOrbitAngle * Math.PI / 180
+    const radius = config.radius + 3 * Math.sin(visualAngle * 2) + crossing.radial
+    const centerX = 233 + radius * Math.sin(visualAngle)
+    const centerY = 233 - radius * Math.cos(visualAngle)
+    const heading = visualOrbitAngle + 90 + crossing.turn
+    const pose = mod(Math.floor(turtleStep) + config.poseOffset, 8)
+    const renderedWidth = Math.round(config.size * crossing.scaleX)
+    const renderedHeight = Math.round(config.size * crossing.scaleY)
+    const halfWidth = renderedWidth / 2
+    const halfHeight = renderedHeight / 2
     turtleRefs[i].setProperty(hmUI.prop.MORE, {
-      x: px(Math.round(centerX - halfSize)),
-      y: px(Math.round(centerY - halfSize)),
-      w: px(config.size),
-      h: px(config.size),
-      center_x: px(halfSize),
-      center_y: px(halfSize),
+      x: px(Math.round(centerX - halfWidth)),
+      y: px(Math.round(centerY - halfHeight)),
+      w: px(renderedWidth),
+      h: px(renderedHeight),
+      center_x: px(halfWidth),
+      center_y: px(halfHeight),
       angle: Math.round(heading),
       src: config.path + pose + '.png',
     })
   }
-  turtleStep = (turtleStep + 1) % orbitSteps
-}
-
-function updateNeedles() {
-  if (!timeSensor || !uiRefs.hourNeedle || !uiRefs.minuteNeedle) return
-  const hourAngle = (timeSensor.hour % 12) * 30 + timeSensor.minute * 0.5
-  const minuteAngle = timeSensor.minute * 6
-  uiRefs.hourNeedle.setProperty(hmUI.prop.MORE, {
-    x: px(0), y: px(0), w: px(466), h: px(466),
-    center_x: px(231), center_y: px(231),
-    angle: hourAngle,
-    src: 'images/final/needles/hour.png',
-  })
-  uiRefs.minuteNeedle.setProperty(hmUI.prop.MORE, {
-    x: px(0), y: px(0), w: px(466), h: px(466),
-    center_x: px(231), center_y: px(231),
-    angle: minuteAngle,
-    src: 'images/final/needles/minute.png',
-  })
+  turtleStep = (turtleStep + 0.5) % orbitSteps
 }
 
 function refresh() {
@@ -165,7 +375,6 @@ function refresh() {
     uiRefs.aodPoint.setProperty(hmUI.prop.SRC, 'images/final/aod/main/' + result.point.key + '.png')
   }
   setText(uiRefs.aodDate, pad2(timeSensor.month) + '月' + pad2(timeSensor.day) + '日 ' + WEEKDAYS[timeSensor.week - 1])
-  updateNeedles()
 }
 
 function createAodView(img) {
@@ -304,6 +513,14 @@ WatchFace({
     uiRefs.day = textWidget(183, 383, 120, 24, '甲子日 · 阳', 13, '0xFFD8E8DF')
     uiRefs.battery = textWidget(298, 383, 82, 24, '电量 --%', 12, '0xFF8FA99B', hmUI.align.RIGHT)
 
+    // The hour hand remains mechanically intact below the turtle family.
+    uiRefs.hourNeedle = hmUI.createWidget(hmUI.widget.TIME_POINTER, {
+      hour_centerX: px(231), hour_centerY: px(231),
+      hour_posX: px(231), hour_posY: px(231),
+      hour_path: img('final/needles/hour.png'),
+      show_level: hmUI.show_level.ONLY_NORMAL,
+    })
+
     // Mother turtle leads clockwise; two smaller turtles follow on the same orbit.
     for (let i = 0; i < TURTLE_CONFIGS.length; i += 1) {
       const config = TURTLE_CONFIGS[i]
@@ -317,26 +534,31 @@ WatchFace({
       }))
     }
     updateTurtles()
-    turtleTimer = timer.createTimer(100, 100, updateTurtles, {})
 
-    // Realistic acupuncture needles always render above text and turtles.
-    uiRefs.hourNeedle = hmUI.createWidget(hmUI.widget.IMG, {
-      x: px(0), y: px(0), w: px(466), h: px(466),
-      center_x: px(231), center_y: px(231), angle: 0,
-      src: img('final/needles/hour.png'),
+    // The minute hand stays above the turtles; only the hour hand is occluded.
+    uiRefs.minuteNeedle = hmUI.createWidget(hmUI.widget.TIME_POINTER, {
+      minute_centerX: px(231), minute_centerY: px(231),
+      minute_posX: px(231), minute_posY: px(231),
+      minute_path: img('final/needles/minute.png'),
+      minute_cover_path: img('final/needles/pivot.png'),
+      minute_cover_x: px(0), minute_cover_y: px(0),
       show_level: hmUI.show_level.ONLY_NORMAL,
     })
-    uiRefs.minuteNeedle = hmUI.createWidget(hmUI.widget.IMG, {
-      x: px(0), y: px(0), w: px(466), h: px(466),
-      center_x: px(231), center_y: px(231), angle: 0,
-      src: img('final/needles/minute.png'),
-      show_level: hmUI.show_level.ONLY_NORMAL,
-    })
-    uiRefs.needlePivot = hmUI.createWidget(hmUI.widget.IMG, {
-      x: px(0), y: px(0), w: px(466), h: px(466),
-      src: img('final/needles/pivot.png'),
-      show_level: hmUI.show_level.ONLY_NORMAL,
-    })
+
+    // During the minute-hand easter egg, a second turtle layer is shown above
+    // the hand so the family appears to stand on and crawl along the needle.
+    for (let i = 0; i < TURTLE_CONFIGS.length; i += 1) {
+      const config = TURTLE_CONFIGS[i]
+      const halfSize = config.size / 2
+      easterEggTurtleRefs.push(hmUI.createWidget(hmUI.widget.IMG, {
+        x: px(-500), y: px(-500),
+        w: px(config.size), h: px(config.size),
+        center_x: px(halfSize), center_y: px(halfSize), angle: 90,
+        src: config.path + '0.png',
+        show_level: hmUI.show_level.ONLY_NORMAL,
+      }))
+    }
+    turtleTimer = timer.createTimer(50, 50, updateTurtles, {})
 
     try {
       timeSensor = hmSensor.createSensor(hmSensor.id.TIME)

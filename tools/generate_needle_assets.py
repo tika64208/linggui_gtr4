@@ -118,10 +118,10 @@ def main() -> None:
     )
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
-    make_needle(tip_y=42, handle_top=92, handle_width=15).save(
+    make_needle(tip_y=28, handle_top=92, handle_width=15).save(
         args.output_dir / "minute.png", optimize=True
     )
-    make_needle(tip_y=69, handle_top=109, handle_width=17).save(
+    make_needle(tip_y=48, handle_top=109, handle_width=17).save(
         args.output_dir / "hour.png", optimize=True
     )
     make_pivot(source).save(args.output_dir / "pivot.png", optimize=True)
