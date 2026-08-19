@@ -5,11 +5,11 @@
     "appName": "灵龟八法",
     "appType": "watchface",
     "version": {
-      "code": 13,
-      "name": "1.8.0"
+      "code": 15,
+      "name": "1.10.0"
     },
     "vender": "zepp",
-    "description": "带玄甲灵龟环游动画的 GTR 4 灵龟八法动态表盘",
+    "description": "带立体针灸针、灵龟家族巡游与低功耗息屏界面的 GTR 4 动态表盘",
     "icon": "images/preview.png"
   },
   "permissions": [

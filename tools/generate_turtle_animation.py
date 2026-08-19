@@ -112,13 +112,20 @@ def make_pose(parts: dict[str, Image.Image], paddle_angle: float) -> Image.Image
 
 def make_poses(source: Image.Image, output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
-    for old_frame in output_dir.glob("*.png"):
+    for old_frame in output_dir.glob("**/*.png"):
         old_frame.unlink()
 
     parts = build_parts(tone_source(source))
     paddle_angles = [0, 9, 16, 9, 0, -9, -16, -9]
     for index, paddle_angle in enumerate(paddle_angles):
-        make_pose(parts, paddle_angle).save(output_dir / f"pose_{index}.png", optimize=True)
+        mother = make_pose(parts, paddle_angle)
+        mother.save(output_dir / f"pose_{index}.png", optimize=True)
+        for child_dir, child_size in (("child1", 72), ("child2", 54)):
+            destination = output_dir / child_dir
+            destination.mkdir(parents=True, exist_ok=True)
+            mother.resize(
+                (child_size, child_size), Image.Resampling.LANCZOS
+            ).save(destination / f"pose_{index}.png", optimize=True)
 
 
 def main() -> None:

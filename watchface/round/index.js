@@ -6,6 +6,13 @@ let turtleTimer = null
 let turtleStep = 0
 let uiRefs = {}
 let pointRefs = []
+let turtleRefs = []
+
+const TURTLE_CONFIGS = [
+  { size: 120, radius: 177, delay: 0, poseOffset: 0, path: 'images/final/turtle/pose_' },
+  { size: 72, radius: 179, delay: 60, poseOffset: 2, path: 'images/final/turtle/child1/pose_' },
+  { size: 54, radius: 181, delay: 100, poseOffset: 4, path: 'images/final/turtle/child2/pose_' },
+]
 
 const STEMS = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸']
 const BRANCHES = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥']
@@ -92,35 +99,58 @@ function setText(widget, text, color) {
   widget.setProperty(hmUI.prop.MORE, options)
 }
 
-function updateTurtle() {
-  if (!uiRefs.turtle) return
+function updateTurtles() {
+  if (turtleRefs.length === 0) return
   const orbitSteps = 600
-  const angle = (turtleStep % orbitSteps) * Math.PI * 2 / orbitSteps
-  const radius = 177 + 3 * Math.sin(angle * 2)
-  const centerX = 233 + radius * Math.sin(angle)
-  const centerY = 233 - radius * Math.cos(angle)
-  const heading = (turtleStep % orbitSteps) * 360 / orbitSteps + 90
-  const pose = turtleStep % 8
-  uiRefs.turtle.setProperty(hmUI.prop.MORE, {
-    x: px(Math.round(centerX - 60)),
-    y: px(Math.round(centerY - 60)),
-    w: px(120),
-    h: px(120),
-    center_x: px(60),
-    center_y: px(60),
-    angle: Math.round(heading),
-    src: 'images/final/turtle/pose_' + pose + '.png',
-  })
+  for (let i = 0; i < TURTLE_CONFIGS.length; i += 1) {
+    const config = TURTLE_CONFIGS[i]
+    const orbitStep = mod(turtleStep - config.delay, orbitSteps)
+    const angle = orbitStep * Math.PI * 2 / orbitSteps
+    const radius = config.radius + 3 * Math.sin(angle * 2)
+    const centerX = 233 + radius * Math.sin(angle)
+    const centerY = 233 - radius * Math.cos(angle)
+    const heading = orbitStep * 360 / orbitSteps + 90
+    const pose = mod(turtleStep + config.poseOffset, 8)
+    const halfSize = config.size / 2
+    turtleRefs[i].setProperty(hmUI.prop.MORE, {
+      x: px(Math.round(centerX - halfSize)),
+      y: px(Math.round(centerY - halfSize)),
+      w: px(config.size),
+      h: px(config.size),
+      center_x: px(halfSize),
+      center_y: px(halfSize),
+      angle: Math.round(heading),
+      src: config.path + pose + '.png',
+    })
+  }
   turtleStep = (turtleStep + 1) % orbitSteps
+}
+
+function updateNeedles() {
+  if (!timeSensor || !uiRefs.hourNeedle || !uiRefs.minuteNeedle) return
+  const hourAngle = (timeSensor.hour % 12) * 30 + timeSensor.minute * 0.5
+  const minuteAngle = timeSensor.minute * 6
+  uiRefs.hourNeedle.setProperty(hmUI.prop.MORE, {
+    x: px(0), y: px(0), w: px(466), h: px(466),
+    center_x: px(231), center_y: px(231),
+    angle: hourAngle,
+    src: 'images/final/needles/hour.png',
+  })
+  uiRefs.minuteNeedle.setProperty(hmUI.prop.MORE, {
+    x: px(0), y: px(0), w: px(466), h: px(466),
+    center_x: px(231), center_y: px(231),
+    angle: minuteAngle,
+    src: 'images/final/needles/minute.png',
+  })
 }
 
 function refresh() {
   if (!timeSensor) return
   const result = calculate(timeSensor.year, timeSensor.month, timeSensor.day, timeSensor.hour)
   setText(uiRefs.shichen, BRANCHES[result.hourBranch] + '时 · ' + STEMS[result.hourStem] + BRANCHES[result.hourBranch])
-  uiRefs.point.setProperty(hmUI.prop.SRC, 'images/final/main/' + result.point.key + '.png')
+  if (uiRefs.point) uiRefs.point.setProperty(hmUI.prop.SRC, 'images/final/main/' + result.point.key + '.png')
   setText(uiRefs.meridian, result.point.meridian + ' · 余数 ' + result.remainder)
-  uiRefs.pair.setProperty(hmUI.prop.SRC, 'images/final/pair/' + result.point.key + '.png')
+  if (uiRefs.pair) uiRefs.pair.setProperty(hmUI.prop.SRC, 'images/final/pair/' + result.point.key + '.png')
   setText(uiRefs.date, pad2(timeSensor.month) + '月' + pad2(timeSensor.day) + '日 ' + WEEKDAYS[timeSensor.week - 1])
   setText(uiRefs.day, STEMS[result.dayStem] + BRANCHES[result.dayBranch] + '日 · ' + (result.divisor === 9 ? '阳' : '阴'))
   for (let i = 0; i < pointRefs.length; i += 1) {
@@ -131,11 +161,88 @@ function refresh() {
     )
   }
   if (batterySensor) setText(uiRefs.battery, '电量 ' + batterySensor.current + '%')
+  if (uiRefs.aodPoint) {
+    uiRefs.aodPoint.setProperty(hmUI.prop.SRC, 'images/final/aod/main/' + result.point.key + '.png')
+  }
+  setText(uiRefs.aodDate, pad2(timeSensor.month) + '月' + pad2(timeSensor.day) + '日 ' + WEEKDAYS[timeSensor.week - 1])
+  updateNeedles()
+}
+
+function createAodView(img) {
+  // AOD is deliberately static: no turtle timer and no animated widgets.
+  hmUI.createWidget(hmUI.widget.IMG, {
+    x: px(0), y: px(0), w: px(466), h: px(466),
+    src: img('final/aod/background.png'),
+    show_level: hmUI.show_level.ONAL_AOD,
+  })
+
+  const timeDigits = []
+  for (let digit = 0; digit < 10; digit += 1) {
+    timeDigits.push(img('final/aod/time/' + digit + '.png'))
+  }
+  uiRefs.aodTime = hmUI.createWidget(hmUI.widget.IMG_TIME, {
+    hour_zero: 1,
+    hour_startX: px(139), hour_startY: px(92),
+    hour_array: timeDigits, hour_space: 0,
+    minute_zero: 1,
+    minute_startX: px(251), minute_startY: px(92),
+    minute_array: timeDigits, minute_space: 0,
+    show_level: hmUI.show_level.ONAL_AOD,
+  })
+  hmUI.createWidget(hmUI.widget.IMG, {
+    x: px(224), y: px(92), w: px(18), h: px(70),
+    src: img('final/aod/time/colon.png'),
+    show_level: hmUI.show_level.ONAL_AOD,
+  })
+
+  uiRefs.aodPoint = hmUI.createWidget(hmUI.widget.IMG, {
+    x: px(103), y: px(272), w: px(260), h: px(66),
+    src: img('final/aod/main/shenmai.png'),
+    show_level: hmUI.show_level.ONAL_AOD,
+  })
+  uiRefs.aodDate = hmUI.createWidget(hmUI.widget.TEXT, {
+    x: px(143), y: px(365), w: px(180), h: px(30),
+    text: '08月18日 周二',
+    color: 0x426C5A,
+    text_size: px(15),
+    text_style: hmUI.text_style.NONE,
+    align_h: hmUI.align.CENTER_H,
+    align_v: hmUI.align.CENTER_V,
+    show_level: hmUI.show_level.ONAL_AOD,
+  })
+
+  // Native TIME_POINTER keeps both hands accurate while AOD JavaScript sleeps.
+  uiRefs.aodNeedles = hmUI.createWidget(hmUI.widget.TIME_POINTER, {
+    hour_centerX: px(231), hour_centerY: px(231),
+    hour_posX: px(231), hour_posY: px(231),
+    hour_path: img('final/aod/needles/hour.png'),
+    minute_centerX: px(231), minute_centerY: px(231),
+    minute_posX: px(231), minute_posY: px(231),
+    minute_path: img('final/aod/needles/minute.png'),
+    minute_cover_path: img('final/aod/needles/pivot.png'),
+    minute_cover_x: px(0), minute_cover_y: px(0),
+    show_level: hmUI.show_level.ONAL_AOD,
+  })
+
+  try {
+    timeSensor = hmSensor.createSensor(hmSensor.id.TIME)
+    minuteListener = function () { refresh() }
+    timeSensor.addEventListener(timeSensor.event.MINUTEEND, minuteListener)
+    refresh()
+  } catch (error) {
+    console.log('灵龟息屏数据初始化失败：' + error)
+  }
 }
 
 WatchFace({
   init_view() {
     const img = function (path) { return 'images/' + path }
+
+    // Zepp OS 1.0 returns a loosely typed screen value on GTR 4.
+    if (hmSetting.getScreenType() == hmSetting.screen_type.AOD) {
+      createAodView(img)
+      return
+    }
 
     // Bitmap rendering stays on the verified official Timer path; only the asset changes.
     hmUI.createWidget(hmUI.widget.IMG, {
@@ -143,16 +250,6 @@ WatchFace({
       src: img('final/bg.png'),
       show_level: hmUI.show_level.ONLY_NORMAL,
     })
-
-    // Position, heading and articulated pose update independently at 10 fps.
-    uiRefs.turtle = hmUI.createWidget(hmUI.widget.IMG, {
-      x: px(173), y: px(-4), w: px(120), h: px(120),
-      center_x: px(60), center_y: px(60), angle: 90,
-      src: img('final/turtle/pose_0.png'),
-      show_level: hmUI.show_level.ONLY_NORMAL,
-    })
-    updateTurtle()
-    turtleTimer = timer.createTimer(100, 100, updateTurtle, {})
 
     for (let i = 0; i < POINT_LAYOUT.length; i += 1) {
       const item = POINT_LAYOUT[i]
@@ -206,6 +303,40 @@ WatchFace({
     uiRefs.date = textWidget(86, 383, 112, 24, '08月18日 周二', 12, '0xFF8FA99B', hmUI.align.LEFT)
     uiRefs.day = textWidget(183, 383, 120, 24, '甲子日 · 阳', 13, '0xFFD8E8DF')
     uiRefs.battery = textWidget(298, 383, 82, 24, '电量 --%', 12, '0xFF8FA99B', hmUI.align.RIGHT)
+
+    // Mother turtle leads clockwise; two smaller turtles follow on the same orbit.
+    for (let i = 0; i < TURTLE_CONFIGS.length; i += 1) {
+      const config = TURTLE_CONFIGS[i]
+      const halfSize = config.size / 2
+      turtleRefs.push(hmUI.createWidget(hmUI.widget.IMG, {
+        x: px(233 - halfSize), y: px(53 - halfSize),
+        w: px(config.size), h: px(config.size),
+        center_x: px(halfSize), center_y: px(halfSize), angle: 90,
+        src: config.path + '0.png',
+        show_level: hmUI.show_level.ONLY_NORMAL,
+      }))
+    }
+    updateTurtles()
+    turtleTimer = timer.createTimer(100, 100, updateTurtles, {})
+
+    // Realistic acupuncture needles always render above text and turtles.
+    uiRefs.hourNeedle = hmUI.createWidget(hmUI.widget.IMG, {
+      x: px(0), y: px(0), w: px(466), h: px(466),
+      center_x: px(231), center_y: px(231), angle: 0,
+      src: img('final/needles/hour.png'),
+      show_level: hmUI.show_level.ONLY_NORMAL,
+    })
+    uiRefs.minuteNeedle = hmUI.createWidget(hmUI.widget.IMG, {
+      x: px(0), y: px(0), w: px(466), h: px(466),
+      center_x: px(231), center_y: px(231), angle: 0,
+      src: img('final/needles/minute.png'),
+      show_level: hmUI.show_level.ONLY_NORMAL,
+    })
+    uiRefs.needlePivot = hmUI.createWidget(hmUI.widget.IMG, {
+      x: px(0), y: px(0), w: px(466), h: px(466),
+      src: img('final/needles/pivot.png'),
+      show_level: hmUI.show_level.ONLY_NORMAL,
+    })
 
     try {
       timeSensor = hmSensor.createSensor(hmSensor.id.TIME)
