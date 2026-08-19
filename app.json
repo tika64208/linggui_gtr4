@@ -1,0 +1,55 @@
+{
+  "configVersion": "v2",
+  "app": {
+    "appId": 1123978,
+    "appName": "灵龟八法",
+    "appType": "watchface",
+    "version": {
+      "code": 7,
+      "name": "1.5.0"
+    },
+    "vender": "zepp",
+    "description": "基于官方 Timer 模板的 GTR 4 灵龟八法表盘",
+    "icon": "images/preview.png"
+  },
+  "permissions": [
+    "gps"
+  ],
+  "runtime": {
+    "apiVersion": {
+      "compatible": "1.0.0",
+      "target": "1.0.1",
+      "minVersion": "1.0.0"
+    }
+  },
+  "targets": {
+    "466x466-amazfit-gtr-4": {
+      "module": {
+        "watchface": {
+          "path": "watchface/gtr-3-pro/index",
+          "main": 1,
+          "editable": 1,
+          "lockscreen": 1
+        }
+      },
+      "platforms": [
+        {
+          "name": "Berlin",
+          "deviceSource": 7930112
+        },
+        {
+          "name": "BerlinW",
+          "deviceSource": 7930113
+        }
+      ],
+      "designWidth": 466
+    }
+  },
+  "i18n": {
+    "en-US": {
+      "appName": "Linggui Bafa"
+    }
+  },
+  "defaultLanguage": "en-US",
+  "debug": false
+}

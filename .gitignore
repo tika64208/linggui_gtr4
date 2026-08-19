@@ -1,0 +1,15 @@
+.DS_Store
+dist/
+*.zab
+*.log
+
+# Temporary installation and QA artifacts
+install-qr*.png
+install-qr*.svg
+official-test-qr.*
+font-layout-qa*.png
+store-preview-360.png
+
+# Downloaded third-party source font; generated bitmap assets remain tracked.
+tools/fonts/*.ttf
+
