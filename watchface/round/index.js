@@ -2,6 +2,8 @@ let timeSensor = null
 let batterySensor = null
 let minuteListener = null
 let batteryListener = null
+let turtleTimer = null
+let turtleStep = 0
 let uiRefs = {}
 let pointRefs = []
 
@@ -90,6 +92,28 @@ function setText(widget, text, color) {
   widget.setProperty(hmUI.prop.MORE, options)
 }
 
+function updateTurtle() {
+  if (!uiRefs.turtle) return
+  const orbitSteps = 600
+  const angle = (turtleStep % orbitSteps) * Math.PI * 2 / orbitSteps
+  const radius = 177 + 3 * Math.sin(angle * 2)
+  const centerX = 233 + radius * Math.sin(angle)
+  const centerY = 233 - radius * Math.cos(angle)
+  const heading = (turtleStep % orbitSteps) * 360 / orbitSteps + 90
+  const pose = turtleStep % 8
+  uiRefs.turtle.setProperty(hmUI.prop.MORE, {
+    x: px(Math.round(centerX - 60)),
+    y: px(Math.round(centerY - 60)),
+    w: px(120),
+    h: px(120),
+    center_x: px(60),
+    center_y: px(60),
+    angle: Math.round(heading),
+    src: 'images/final/turtle/pose_' + pose + '.png',
+  })
+  turtleStep = (turtleStep + 1) % orbitSteps
+}
+
 function refresh() {
   if (!timeSensor) return
   const result = calculate(timeSensor.year, timeSensor.month, timeSensor.day, timeSensor.hour)
@@ -119,6 +143,16 @@ WatchFace({
       src: img('final/bg.png'),
       show_level: hmUI.show_level.ONLY_NORMAL,
     })
+
+    // Position, heading and articulated pose update independently at 10 fps.
+    uiRefs.turtle = hmUI.createWidget(hmUI.widget.IMG, {
+      x: px(173), y: px(-4), w: px(120), h: px(120),
+      center_x: px(60), center_y: px(60), angle: 90,
+      src: img('final/turtle/pose_0.png'),
+      show_level: hmUI.show_level.ONLY_NORMAL,
+    })
+    updateTurtle()
+    turtleTimer = timer.createTimer(100, 100, updateTurtle, {})
 
     for (let i = 0; i < POINT_LAYOUT.length; i += 1) {
       const item = POINT_LAYOUT[i]
@@ -197,5 +231,6 @@ WatchFace({
   onDestroy() {
     if (timeSensor && minuteListener) timeSensor.removeEventListener(timeSensor.event.MINUTEEND, minuteListener)
     if (batterySensor && batteryListener) batterySensor.removeEventListener(hmSensor.event.CHANGE, batteryListener)
+    if (turtleTimer) timer.stopTimer(turtleTimer)
   },
 })
